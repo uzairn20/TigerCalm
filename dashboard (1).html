@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TigerCalm</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      background: #0c0e18;
+      color: #e8e8e8;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: #13151f;
+      border-bottom: 1px solid #1e2130;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-left h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #f4a01c;
+    }
+    .header-left p {
+      font-size: .75rem;
+      color: #555;
+      margin-top: .1rem;
+    }
+    .live-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      margin-right: 6px;
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .header-right {
+      font-size: .72rem;
+      color: #444;
+      text-align: right;
+    }
+    .header-right .loc {
+      font-size: .8rem;
+      color: #888;
+      font-weight: 500;
+    }
+
+    /* ── Main layout ── */
+    .main { padding: 1.2rem 1rem 2rem; max-width: 480px; margin: 0 auto; }
+
+    /* ── Overall score card ── */
+    .score-card {
+      background: #13151f;
+      border: 2px solid #1e2130;
+      border-radius: 20px;
+      padding: 1.5rem 1.2rem 1rem;
+      text-align: center;
+      margin-bottom: 1.2rem;
+      transition: border-color .8s, background .8s;
+    }
+    .score-card.green  { border-color: #22c55e; background: #091a10; }
+    .score-card.orange { border-color: #f59e0b; background: #1a1204; }
+    .score-card.red    {
+      border-color: #ef4444; background: #190404;
+      animation: pulse-red 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-red {
+      0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}
+      50%{box-shadow:0 0 0 18px rgba(239,68,68,.08)}
+    }
+
+    /* Big gauge SVG */
+    .big-gauge { margin: 0 auto; display: block; }
+
+    .score-label {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-top: .2rem;
+    }
+    .green  .score-label { color: #22c55e; }
+    .orange .score-label { color: #f59e0b; }
+    .red    .score-label { color: #ef4444; }
+
+    .score-sub {
+      font-size: .78rem;
+      color: #444;
+      margin-top: .2rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Gemini message */
+    .gemini-card {
+      background: #0d0f1a;
+      border-radius: 12px;
+      border-left: 3px solid #f4a01c;
+      padding: .9rem 1rem;
+      margin-top: 1rem;
+      text-align: left;
+    }
+    .gemini-card .tag {
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #f4a01c;
+      margin-bottom: .35rem;
+      display: block;
+    }
+    .gemini-card p {
+      font-size: .92rem;
+      line-height: 1.65;
+      color: #bbb;
+    }
+
+    /* ── Metric grid ── */
+    .metrics-title {
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #333;
+      margin: 1.4rem 0 .7rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .9rem;
+    }
+
+    .metric-card {
+      background: #13151f;
+      border: 1px solid #1a1d2a;
+      border-radius: 16px;
+      padding: 1rem .8rem .8rem;
+      text-align: center;
+      transition: border-color .6s;
+    }
+    .metric-card.green-border  { border-color: rgba(34,197,94,.35); }
+    .metric-card.orange-border { border-color: rgba(245,158,11,.35); }
+    .metric-card.red-border    { border-color: rgba(239,68,68,.35); }
+
+    .metric-card .metric-val {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #fff;
+      margin-top: .3rem;
+    }
+    .metric-card .metric-name {
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #444;
+      margin-top: .3rem;
+    }
+    .metric-card .metric-zone {
+      font-size: .7rem;
+      color: #555;
+      margin-top: .15rem;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      font-size: .68rem;
+      color: #252830;
+      padding: 1.5rem 1rem;
+    }
+    .footer span { color: #333; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <h1>🐯 TigerCalm</h1>
+    <p>Sensory comfort monitor</p>
+  </div>
+  <div class="header-right">
+    <div class="loc" id="locLabel">Loading…</div>
+    <div style="margin-top:.3rem"><span class="live-dot"></span>Live</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Overall score card -->
+  <div class="score-card" id="scoreCard">
+
+    <!-- Large SVG arc gauge for overall score -->
+    <svg class="big-gauge" id="bigGaugeSvg"
+         viewBox="0 0 200 130" width="200" height="130">
+      <!-- Background arc -->
+      <path id="bg-arc" d="" fill="none" stroke="#1a1d2a" stroke-width="16" stroke-linecap="round"/>
+      <!-- Value arc -->
+      <path id="val-arc" d="" fill="none" stroke="#22c55e" stroke-width="16" stroke-linecap="round"
+            style="transition: all 1.2s ease"/>
+      <!-- Score number -->
+      <text id="big-score-num" x="100" y="80"
+            text-anchor="middle" dominant-baseline="central"
+            font-size="42" font-weight="700" fill="white">—</text>
+      <text x="100" y="108"
+            text-anchor="middle" font-size="11" fill="#444"
+            letter-spacing="1">OVERALL SCORE</text>
+    </svg>
+
+    <div class="score-label" id="scoreLabel">LOADING</div>
+    <div class="score-sub">Campus comfort level</div>
+
+    <div class="gemini-card">
+      <span class="tag">✨ Gemini recommendation</span>
+      <p id="geminiText">Fetching current conditions…</p>
+    </div>
+  </div>
+
+  <!-- Section title -->
+  <div class="metrics-title">Individual readings</div>
+
+  <!-- 2×2 metric grid -->
+  <div class="grid">
+
+    <!-- Sound level -->
+    <div class="metric-card" id="card-sound">
+      <svg viewBox="0 0 130 90" width="130" height="90" style="display:block;margin:0 auto">
+        <path id="bg-sound" d="" fill="none" stroke="#1a1d2a" stroke-width="11" stroke-linecap="round"/>
+        <path id="arc-sound" d="" fill="none" stroke="#22c55e" stroke-width="11" stroke-linecap="round"
+              style="transition:all 1s ease"/>
+        <text id="val-sound" x="65" y="58" text-anchor="middle" dominant-baseline="central"
+              font-size="22" font-weight="700" fill="white">—</text>
+        <text x="65" y="76" text-anchor="middle" font-size="8" fill="#555" letter-spacing=".5">/100</text>
+      </svg>
+      <div class="metric-val" id="txt-sound">—</div>
+      <div class="metric-name">🔊 Sound level</div>
+      <div class="metric-zone" id="zone-sound">—</div>
+    </div>
+
+    <!-- Temperature -->
+    <div class="metric-card" id="card-temp">
+      <svg viewBox="0 0 130 90" width="130" height="90" style="display:block;margin:0 auto">
+        <path id="bg-temp" d="" fill="none" stroke="#1a1d2a" stroke-width="11" stroke-linecap="round"/>
+        <path id="arc-temp" d="" fill="none" stroke="#22c55e" stroke-width="11" stroke-linecap="round"
+              style="transition:all 1s ease"/>
+        <text id="val-temp" x="65" y="55" text-anchor="middle" dominant-baseline="central"
+              font-size="19" font-weight="700" fill="white">—</text>
+        <text x="65" y="73" text-anchor="middle" font-size="8" fill="#555">°F</text>
+      </svg>
+      <div class="metric-val" id="txt-temp">—</div>
+      <div class="metric-name">🌡️ Temperature</div>
+      <div class="metric-zone" id="zone-temp">—</div>
+    </div>
+
+    <!-- Humidity -->
+    <div class="metric-card" id="card-hum">
+      <svg viewBox="0 0 130 90" width="130" height="90" style="display:block;margin:0 auto">
+        <path id="bg-hum" d="" fill="none" stroke="#1a1d2a" stroke-width="11" stroke-linecap="round"/>
+        <path id="arc-hum" d="" fill="none" stroke="#22c55e" stroke-width="11" stroke-linecap="round"
+              style="transition:all 1s ease"/>
+        <text id="val-hum" x="65" y="55" text-anchor="middle" dominant-baseline="central"
+              font-size="22" font-weight="700" fill="white">—</text>
+        <text x="65" y="73" text-anchor="middle" font-size="8" fill="#555">%</text>
+      </svg>
+      <div class="metric-val" id="txt-hum">—</div>
+      <div class="metric-name">💧 Humidity</div>
+      <div class="metric-zone" id="zone-hum">—</div>
+    </div>
+
+    <!-- Activity -->
+    <div class="metric-card" id="card-act">
+      <svg viewBox="0 0 130 90" width="130" height="90" style="display:block;margin:0 auto">
+        <path id="bg-act" d="" fill="none" stroke="#1a1d2a" stroke-width="11" stroke-linecap="round"/>
+        <path id="arc-act" d="" fill="none" stroke="#22c55e" stroke-width="11" stroke-linecap="round"
+              style="transition:all 1s ease"/>
+        <text id="val-act" x="65" y="55" text-anchor="middle" dominant-baseline="central"
+              font-size="22" font-weight="700" fill="white">—</text>
+        <text x="65" y="73" text-anchor="middle" font-size="8" fill="#555">movements</text>
+      </svg>
+      <div class="metric-val" id="txt-act">—</div>
+      <div class="metric-name">🚶 Activity</div>
+      <div class="metric-zone" id="zone-act">last 2 min</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="footer">
+  TigerCalm · University of the Pacific · Updated: <span id="updatedEl">—</span>
+</div>
+
+<script>
+  // ── Firebase config — replace with yours ─────────────────────
+  const firebaseConfig = {
+  apiKey:            "AIzaSyD6cD-aWHJjlTdHhC4ardJpGwnrBxBBHeI",
+  authDomain:        "tigercalm-1fa50.firebaseapp.com",
+  databaseURL:       "https://tigercalm-1fa50-default-rtdb.firebaseio.com",
+  projectId:         "tigercalm-1fa50",
+  storageBucket:     "tigercalm-1fa50.firebasestorage.app",
+  messagingSenderId: "1046046575863",
+  appId:             "1:1046046575863:web:810a75173702bf6131d7f2"
+};
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // ── Gauge drawing ─────────────────────────────────────────────
+  /*
+   * All gauges use a 270° arc (like a speedometer).
+   * Start: 135° (7:30 o'clock position)
+   * End:   405° = 45° (4:30 o'clock position)
+   * Clockwise rotation.
+   */
+
+  function toRad(d) { return d * Math.PI / 180; }
+
+  function gaugeArc(cx, cy, r, startDeg, pct) {
+    pct = Math.max(0.001, Math.min(1, pct));
+    const sweep  = 270 * pct;
+    const endDeg = startDeg + sweep;
+    const sx = cx + r * Math.cos(toRad(startDeg));
+    const sy = cy + r * Math.sin(toRad(startDeg));
+    const ex = cx + r * Math.cos(toRad(endDeg));
+    const ey = cy + r * Math.sin(toRad(endDeg));
+    const large = sweep > 180 ? 1 : 0;
+    return `M${sx.toFixed(2)},${sy.toFixed(2)} A${r},${r},0,${large},1,${ex.toFixed(2)},${ey.toFixed(2)}`;
+  }
+
+  function fullArc(cx, cy, r) {
+    // Full 270° background arc
+    const sx = cx + r * Math.cos(toRad(135));
+    const sy = cy + r * Math.sin(toRad(135));
+    const ex = cx + r * Math.cos(toRad(45));
+    const ey = cy + r * Math.sin(toRad(45));
+    return `M${sx.toFixed(2)},${sy.toFixed(2)} A${r},${r},0,1,1,${ex.toFixed(2)},${ey.toFixed(2)}`;
+  }
+
+  // Draw static background arcs on load
+  function initGauges() {
+    // Big gauge (cx=100, cy=70, r=55)
+    document.getElementById('bg-arc').setAttribute('d', fullArc(100, 70, 55));
+    document.getElementById('val-arc').setAttribute('d', gaugeArc(100, 70, 55, 135, 0.001));
+
+    // Small gauges (cx=65, cy=52, r=38)
+    ['sound','temp','hum','act'].forEach(id => {
+      document.getElementById('bg-'+id).setAttribute('d', fullArc(65, 52, 38));
+      document.getElementById('arc-'+id).setAttribute('d', gaugeArc(65, 52, 38, 135, 0.001));
+    });
+  }
+  initGauges();
+
+  // ── Color helpers ─────────────────────────────────────────────
+
+  const COLORS = { green: '#22c55e', orange: '#f59e0b', red: '#ef4444' };
+
+  function soundColor(s)  { return s < 30 ? 'green' : s < 65 ? 'orange' : 'red'; }
+  function tempColor(t)   { return (t >= 66 && t <= 76) ? 'green' : (t >= 62 && t <= 82) ? 'orange' : 'red'; }
+  function humColor(h)    { return (h >= 38 && h <= 58) ? 'green' : (h >= 28 && h <= 68) ? 'orange' : 'red'; }
+  function actColor(a)    { return a < 4 ? 'green' : a < 9 ? 'orange' : 'red'; }
+
+  function soundZone(s)   { return s < 30 ? 'Quiet — great for focusing' : s < 65 ? 'Moderate noise' : 'Loud — may be overwhelming'; }
+  function tempZone(t)    { return (t >= 66 && t <= 76) ? 'Comfortable range' : (t < 66 ? 'A bit cool' : 'Warm — stay hydrated'); }
+  function humZone(h)     { return (h >= 38 && h <= 58) ? 'Comfortable range' : (h < 38 ? 'Dry air' : 'Humid — may feel sticky'); }
+  function actZone(a)     { return a < 4 ? 'Low — space is calm' : a < 9 ? 'Moderate movement' : 'High — space is busy'; }
+
+  function borderClass(colorKey) {
+    return colorKey === 'green' ? 'green-border' : colorKey === 'orange' ? 'orange-border' : 'red-border';
+  }
+
+  // ── Update a small metric gauge ───────────────────────────────
+
+  function updateSmallGauge(id, pct, colorKey, valText, labelText, zoneText) {
+    const arc = document.getElementById('arc-' + id);
+    arc.setAttribute('d', gaugeArc(65, 52, 38, 135, pct));
+    arc.style.stroke = COLORS[colorKey];
+
+    document.getElementById('val-' + id).textContent = valText;
+    document.getElementById('txt-' + id).textContent = labelText;
+    document.getElementById('zone-' + id).textContent = zoneText;
+
+    const card = document.getElementById('card-' + id);
+    card.className = 'metric-card ' + borderClass(colorKey);
+  }
+
+  // ── Firebase listener ─────────────────────────────────────────
+
+  db.ref('/tigerCalm').on('value', snap => {
+    const d = snap.val();
+    if (!d) return;
+
+    const { location, sensors, environment, status } = d;
+    const color = status.color || 'green';
+    const score = status.comfortScore ?? 0;
+    const pct   = score / 100;
+
+    // Header
+    document.getElementById('locLabel').textContent = '📍 ' + (location || 'Campus');
+
+    // ── Big score card ──
+    const card = document.getElementById('scoreCard');
+    card.className = 'score-card ' + color;
+
+    // Big gauge
+    const bigArc = document.getElementById('val-arc');
+    bigArc.setAttribute('d', gaugeArc(100, 70, 55, 135, pct));
+    bigArc.style.stroke = COLORS[color];
+
+    document.getElementById('big-score-num').textContent = score;
+    document.getElementById('scoreLabel').textContent    = status.level || '—';
+    document.getElementById('geminiText').textContent    = status.message || '—';
+
+    // ── Sound ──
+    const sound = environment.soundScore ?? 0;
+    updateSmallGauge('sound', sound/100, soundColor(sound),
+      sound + '/100', sound < 30 ? 'Quiet' : sound < 65 ? 'Moderate' : 'Loud',
+      soundZone(sound));
+
+    // ── Temperature ──
+    const temp = sensors.temperatureF ?? 72;
+    const tempPct = Math.max(0, Math.min(1, (temp - 55) / (95 - 55)));
+    updateSmallGauge('temp', tempPct, tempColor(temp),
+      temp.toFixed(1) + '°F', temp.toFixed(1) + '°F',
+      tempZone(temp));
+
+    // ── Humidity ──
+    const hum = sensors.humidity ?? 50;
+    updateSmallGauge('hum', hum / 100, humColor(hum),
+      hum.toFixed(0) + '%', hum.toFixed(0) + '% RH',
+      humZone(hum));
+
+    // ── Activity ──
+    const act = environment.activityCount ?? 0;
+    const actPct = Math.min(1, act / 20);
+    updateSmallGauge('act', actPct, actColor(act),
+      act + '', act + ' detected',
+      actZone(act));
+
+    // Footer timestamp
+    const t = status.lastUpdated ?? 0;
+    document.getElementById('updatedEl').textContent =
+      t > 0 ? new Date(t * 1000).toLocaleTimeString() : '—';
+  });
+</script>
+</body>
+</html>
