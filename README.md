@@ -1,4 +1,4 @@
-🐯 TigerCalm
+TigerCalm
 Campus Sensory Comfort Monitor — University of the Pacific Hackathon
 
 Hack the Pacific Life — for every Tiger.
